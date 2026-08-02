@@ -1,0 +1,39 @@
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Config and Secrets
+.env
+config.yaml
+
+# Logs and Outputs
+logs/
+*.log
+trace.txt
+backtest_results.txt
+backtest/data/
+
+# Data and Models
+lab/
+models/
+*.csv
+*.parquet
+*.pt
+*.pkl
+.antigravityignore
+.pytest_cache/
+*.egg-info/
+
+# Misc
+.DS_Store
+roadmap.txt
+
+debug_bb.py
+debug_risk.py
+evaluate_models.py

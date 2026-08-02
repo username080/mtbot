@@ -1,0 +1,54 @@
+# ─── MTBot Docker Compose ────────────────────────────────────────────────────────
+# Spins up the bot and its Redis sidecar as a self-contained unit.
+#
+# Usage:
+#   1. Copy .env.example -> .env and fill in your real values.
+#   2. docker compose up -d --build
+#   3. Check logs: docker compose logs -f mtbot
+
+services:
+
+  # ── Redis message broker ───────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: always
+    # Redis is NOT exposed to the host — only reachable inside the Docker network.
+    # This prevents external actors from pushing control commands.
+    networks:
+      - botnet
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── MTBot (main application) ───────────────────────────────────────────────
+  mtbot:
+    build: .
+    image: mtbot:latest
+    restart: always
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Override to use Docker's internal redis service name
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    ports:
+      # Only bind to localhost — the SSH tunnel will forward this to your local machine.
+      # NEVER change 127.0.0.1 to 0.0.0.0 unless you have a firewall in front.
+      - "127.0.0.1:6594:6594"
+    volumes:
+      # Persist model weights and logs across container restarts
+      - ./workers/analyser/models:/app/workers/analyser/models
+      - ./logs:/app/logs
+    networks:
+      - botnet
+    # Use shared memory for portfolio state (required by shm_service)
+    shm_size: '64mb'
+
+networks:
+  botnet:
+    driver: bridge
