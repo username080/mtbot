@@ -2,7 +2,6 @@ import sys
 import os
 import json
 import logging
-import pandas as pd
 import numpy as np
 
 # Mute noisy engine logs for fast sweep

@@ -4,7 +4,6 @@ Purpose: Batch extracts and converts raw historical tick data from Binance ZIP f
 import os
 import zipfile
 import polars as pl
-import argparse
 import logging
 from pathlib import Path
 

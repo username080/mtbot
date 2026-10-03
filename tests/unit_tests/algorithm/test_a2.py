@@ -1,4 +1,3 @@
-import pytest
 from unittest.mock import MagicMock, patch
 from workers.analyser.algorithm.primary_models import PrimaryModelRunner
 

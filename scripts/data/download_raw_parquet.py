@@ -8,7 +8,6 @@ import time
 import zipfile
 import urllib.request
 import logging
-from pathlib import Path
 
 try:
     import polars as pl

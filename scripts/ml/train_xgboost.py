@@ -13,7 +13,6 @@ import json
 import logging
 import argparse
 import pandas as pd
-import numpy as np
 import xgboost as xgb
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))

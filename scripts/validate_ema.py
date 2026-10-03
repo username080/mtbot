@@ -1,8 +1,6 @@
 import os
 import pandas as pd
 import numpy as np
-import sys
-import json
 
 DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../backtest/data"))
 

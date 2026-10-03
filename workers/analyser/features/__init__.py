@@ -5,7 +5,7 @@ from .cusum import CUSUMFilter
 from .bar_speed import BarSpeedDetector
 from .regime import RegimeFeatures
 from .assembler import FeatureAssembler
-from .ffd import FastFFD, compute_ffd_series
+from .ffd import FastFFD
 
 __all__ = [
     "VPIN",
@@ -16,5 +16,4 @@ __all__ = [
     "RegimeFeatures",
     "FeatureAssembler",
     "FastFFD",
-    "compute_ffd_series"
 ]

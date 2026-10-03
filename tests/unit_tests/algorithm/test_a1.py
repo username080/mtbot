@@ -1,4 +1,3 @@
-import pytest
 import pandas as pd
 from collections import deque
 from workers.analyser.algorithm.indicators import compute_live_ta

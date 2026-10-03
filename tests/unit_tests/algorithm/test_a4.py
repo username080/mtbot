@@ -1,4 +1,3 @@
-import pytest
 from workers.analyser.algorithm.risk_manager import RiskManager
 
 def test_risk_manager_kelly_sizing():

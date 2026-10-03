@@ -1,4 +1,3 @@
-import pytest
 from unittest.mock import MagicMock, patch
 from workers.analyser.algorithm.meta_model import MetaModelRunner
 

@@ -1,5 +1,4 @@
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from workers.analyser.algorithm.signal_engine import SignalEngine
 
 @patch('workers.analyser.algorithm.signal_engine.compute_live_ta')
@@ -42,7 +41,7 @@ def test_signal_engine_orchestration(mock_rm, mock_gate, mock_meta, mock_pm, moc
             "tp_vol_mult": 2.0
         }
     }
-    
+
     # Setup Mocks
     mock_ta.return_value = {
         "adx_atr_ratio": 0.5,
@@ -56,14 +55,14 @@ def test_signal_engine_orchestration(mock_rm, mock_gate, mock_meta, mock_pm, moc
     mock_pm_instance.is_loaded.return_value = True
     # We will trigger a LONG signal
     mock_pm_instance.predict.return_value = (0.65, 0.45)
-    
+
     mock_meta_instance = mock_meta.return_value
     mock_meta_instance.enabled = False
     mock_meta_instance.evaluate.return_value = 0.65
-    
+
     mock_gate_instance = mock_gate.return_value
     mock_gate_instance.check.return_value = (True, "Pass")
-    
+
     mock_rm_instance = mock_rm.return_value
     mock_rm_instance.calculate_position_size.return_value = {
         "action": "ENTRY",
@@ -74,14 +73,21 @@ def test_signal_engine_orchestration(mock_rm, mock_gate, mock_meta, mock_pm, moc
         "tp_pct": 0.02,
         "sl_pct": 0.02
     }
-    
+
     engine = SignalEngine("BTCUSDT", config)
     # Inject mocked instances
     engine.primary_models = mock_pm_instance
     engine.meta_model = mock_meta_instance
     engine.gate = mock_gate_instance
     engine.risk_manager = mock_rm_instance
-    
+
+    # Regression test for documentation.md §9 item 1: update_funding_rate() used to be a
+    # no-op, so the live path never actually fed a real funding rate into the
+    # assembler. Set a non-zero rate before any bars come in and verify it
+    # reaches the assembler on the first bar that completes warmup.
+    engine.update_funding_rate(0.00075)
+    assert engine.live_funding_rate == 0.00075
+
     # 1. Fill the queue (size 10)
     for i in range(9):
         engine.on_bar({
@@ -97,12 +103,17 @@ def test_signal_engine_orchestration(mock_rm, mock_gate, mock_meta, mock_pm, moc
             "quote_imbalance": 0.0,
             "time_elapsed": 1.0,
             "trades": 100,
-            "fundingRate": 0.0001
         })
-        
+
     assert engine.pending_signal is None
-    
-    # 2. 10th bar triggers the prediction and gate
+    # Warmup isn't complete yet (bar_queue_size=10, only 9 bars fed so far),
+    # so on_bar has returned before ever reaching the assembler - last_funding
+    # is still its initial 0.0 at this point.
+    assert engine.assembler.last_funding == 0.0
+
+    # 2. 10th bar triggers the prediction and gate - the first bar that
+    # actually reaches self.assembler.update(), so the stored funding rate
+    # set above should now flow through instead of the old always-0.0 bug.
     res = engine.on_bar({
         "close": 50000.0,
         "close_time": 1010,
@@ -116,13 +127,13 @@ def test_signal_engine_orchestration(mock_rm, mock_gate, mock_meta, mock_pm, moc
         "quote_imbalance": 0.0,
         "time_elapsed": 1.0,
         "trades": 100,
-        "fundingRate": 0.0001
     })
-    
+
     assert res is None
     assert engine.pending_signal is not None
     assert engine.pending_signal["direction"] == 1
-    
+    assert engine.assembler.last_funding == 0.00075
+
     # 3. Next bar triggers patience / entry
     res2 = engine.on_bar({
         "close": 50000.0,
@@ -137,9 +148,8 @@ def test_signal_engine_orchestration(mock_rm, mock_gate, mock_meta, mock_pm, moc
         "quote_imbalance": 0.0,
         "time_elapsed": 1.0,
         "trades": 100,
-        "fundingRate": 0.0001
     })
-    
+
     assert res2 is not None
     assert res2["action"] == "ENTRY"
     assert engine.active_position == True

@@ -2,7 +2,6 @@ import os
 import sys
 import pandas as pd
 import xgboost as xgb
-import numpy as np
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))

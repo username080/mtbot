@@ -1,0 +1,8 @@
+bütün olası metrikler için veri setini oluştur.
+ardından her bir metrik için accuarcy veya benzeri
+istatistiği çıkar
+bunlar arasından en iyi 10 tanesi veya belli thresholdu
+geçenleri gerçekten modeline kat.
+istatistik çıkarırken bir model kullanma ya da 
+kullancaksan sadece o metrikle eğiterek kullan amaç 
+tamami ile o metriğin istatistiğini bulmak olmalı.

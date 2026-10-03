@@ -1,5 +1,4 @@
 import sys, os, json, logging, itertools, argparse
-import pandas as pd
 import numpy as np
 
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(message)s')

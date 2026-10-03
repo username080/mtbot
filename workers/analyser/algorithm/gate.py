@@ -58,7 +58,7 @@ class Gate:
                     return False, f"Cooldown active: {int(bars_since_last_trade)} bars passed, need {self.cooldown_bars}"
             
         # 5. Funding Rate
-        funding = metrics["fundingRate"]
+        funding = metrics.get("funding_rate", 0.0)
         if signal_type == "LONG" and funding > self.max_funding_long:
             return False, f"Funding rate {funding:.5f} too high for long"
         if signal_type == "SHORT" and funding < self.min_funding_short:

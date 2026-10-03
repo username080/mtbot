@@ -9,7 +9,7 @@ import xgboost as xgb
 import logging
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-from shared.features import PRIMARY_FEATURES, META_FEATURES
+from shared.features import META_FEATURES
 from shared.meta_signal_builder import build_sequential_meta_signals
 
 logging.basicConfig(level=logging.INFO)

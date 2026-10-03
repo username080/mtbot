@@ -7,9 +7,8 @@ Achieves statistical stationarity (I(0)) for non-stationary price/volume series 
 """
 
 import numpy as np
-import pandas as pd
 from collections import deque
-from typing import List, Union
+from typing import Union
 
 class FastFFD:
     """
@@ -71,29 +70,3 @@ class FastFFD:
     def reset(self):
         self.history.clear()
         self._current_val = 0.0
-
-
-def compute_ffd_series(series: Union[pd.Series, np.ndarray], d: float = 0.40, threshold: float = 1e-4) -> np.ndarray:
-    """
-    Fast vectorized Fixed-Width Window Fractional Differencing for entire series (useful in data preparation).
-    """
-    if isinstance(series, pd.Series):
-        vals = series.values.astype(np.float64)
-    else:
-        vals = np.asarray(series, dtype=np.float64)
-        
-    weights = FastFFD._compute_weights(d, threshold)
-    window_len = len(weights)
-    
-    if len(vals) == 0:
-        return np.array([], dtype=np.float64)
-        
-    # convolve with weights (which are ordered w0, w1, ... for X_t, X_{t-1}, ...)
-    # using mode='full' and taking the first len(vals) outputs matches the causally filtered series
-    out = np.convolve(vals, weights, mode='full')[:len(vals)]
-    
-    # Set warmup period to 0.0 to prevent artifact distortion before filter stabilizes
-    warmup = min(window_len - 1, len(out))
-    out[:warmup] = 0.0
-    
-    return out

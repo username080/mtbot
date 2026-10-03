@@ -7,7 +7,7 @@ interface, so the blackbox sees no difference between backtesting
 and live trading.
 """
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from collections import deque
@@ -39,10 +39,6 @@ class Trade:
     reason:      str                    = ""
     regime:      str                    = ""
     score:       float                  = 0.0
-
-    @property
-    def is_open(self) -> bool:
-        return self.exit_price is None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -76,15 +72,6 @@ class BacktestPortfolio:
 
         # Dynamic win rate queue (Burn-in 50/50 prior over 50 trades, interleaved)
         self.win_queue = deque([x for _ in range(25) for x in (True, False)], maxlen=50)
-
-        # Trailing-stop tracking: symbol → highest/lowest since entry
-        self._trail_high: Dict[str, float] = {}
-        self._trail_low:  Dict[str, float] = {}
-
-    def get_win_rate(self) -> float:
-        """Returns the dynamic win rate based on the last 50 trades."""
-        wins = sum(1 for w in self.win_queue if w)
-        return wins / len(self.win_queue)
 
     # ── Equity ────────────────────────────────────────────────────────
     def current_equity(self, prices: Dict[str, float]) -> float:
@@ -153,8 +140,6 @@ class BacktestPortfolio:
             is_short=is_short, regime=regime, score=score,
         )
         self._open_positions[symbol] = trade
-        self._trail_high[symbol] = price
-        self._trail_low[symbol]  = price
 
         logger.info(
             f"[Portfolio] OPEN {symbol}: qty={qty}, price={price}, "
@@ -207,9 +192,6 @@ class BacktestPortfolio:
         # Update dynamic win rate
         self.win_queue.append(pnl > 0)
 
-        self._trail_high.pop(symbol, None)
-        self._trail_low.pop(symbol, None)
-
         logger.info(
             f"[Portfolio] CLOSE {symbol}: price={price}, pnl={pnl:.2f}, "
             f"pnl_pct={pnl_pct*100:.2f}%, reason={reason}"
@@ -218,26 +200,6 @@ class BacktestPortfolio:
 
     def has_position(self, symbol: str) -> bool:
         return symbol in self._open_positions
-
-    def get_position_qty(self, symbol: str) -> float:
-        t = self._open_positions.get(symbol)
-        return t.qty if t else 0.0
-
-    def get_position(self, symbol: str) -> Optional[Trade]:
-        return self._open_positions.get(symbol)
-
-    # ── Trailing stop ─────────────────────────────────────────────────
-    def update_trailing(self, symbol: str, price: float):
-        """Update highest/lowest tracked prices for trailing stop logic."""
-        if symbol in self._open_positions:
-            self._trail_high[symbol] = max(self._trail_high.get(symbol, price), price)
-            self._trail_low[symbol]  = min(self._trail_low.get(symbol, price), price)
-
-    def get_trail_high(self, symbol: str) -> float:
-        return self._trail_high.get(symbol, 0.0)
-
-    def get_trail_low(self, symbol: str) -> float:
-        return self._trail_low.get(symbol, float("inf"))
 
     # ── Metrics summary ───────────────────────────────────────────────
     def summary(self) -> dict:

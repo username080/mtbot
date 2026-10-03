@@ -58,9 +58,14 @@ class SignalEngine:
         self.regime = 0
         self.regime_duration = 0
 
+        # Last funding rate seen via update_funding_rate() - fed into the assembler
+        # on the next live bar so funding_rate/funding_rate_z/funding_rate_momentum
+        # match what the models were actually trained on (see documentation.md §9).
+        self.live_funding_rate = 0.0
+
     def update_funding_rate(self, rate: float):
-        pass # Disabling funding rate to avoid API block issues
-        
+        self.live_funding_rate = rate
+
     def on_bar(self, packet: dict) -> Optional[Dict]:
         """
         Called every time a new Dollar Bar closes.
@@ -123,7 +128,7 @@ class SignalEngine:
         # We must manually calculate all microstructure and TA features for this single bar,
         # and then ask the XGBoost models to predict the probabilities in real-time.
         else:
-            self.assembler.update(packet, self.bar_queue)
+            self.assembler.update(packet, self.bar_queue, funding_rate=self.live_funding_rate)
             if len(self.bar_queue) < fetch(self.config, "bar_queue_size"):
                 return None
                 
@@ -273,7 +278,6 @@ class SignalEngine:
                     )
                     
                 if meta_prob >= meta_thresh:
-                    features["fundingRate"] = packet.get("fundingRate", 0.0)
                     target_prob = prob_long if direction == 1 else prob_short
                     opposing_prob = prob_short if direction == 1 else prob_long
                     signal_type = "LONG" if direction == 1 else "SHORT"

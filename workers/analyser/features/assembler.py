@@ -23,15 +23,14 @@ class FeatureAssembler:
         self.regime = RegimeFeatures()
         self.ffd_price = FastFFD(d=fetch(config, "ffd_d_price"), threshold=fetch(config, "ffd_threshold"))
         self.ffd_volume = FastFFD(d=fetch(config, "ffd_d_vol"), threshold=fetch(config, "ffd_threshold"))
-        
+
         # History for advanced features
         self.history = deque(maxlen=20)
-        self.vpin_history = deque(maxlen=1440)
         self.trade_size_history = deque(maxlen=200)
         self.funding_history = deque(maxlen=200)
         self.last_timestamp = 0
         self.last_funding = 0.0
-        
+
     def update(self, bar: dict, bar_queue: Deque[dict], funding_rate: float = 0.0):
         self.vpin.update(bar)
         self.bocpd.update(bar)
@@ -41,17 +40,16 @@ class FeatureAssembler:
         self.regime.update(bar_queue)
         self.ffd_price.update(np.log(max(1e-9, bar["close"])))
         self.ffd_volume.update(np.log(1.0 + max(0.0, bar["volume"])))
-        
+
         self.last_timestamp = bar["close_time"]
         self.last_funding = funding_rate
-        
+
         # Calculate buy_sell_ratio and net_volume_imbalance
         buy_vol = bar["buy_volume"]
         sell_vol = bar["sell_volume"]
         vol = bar["volume"]
-        bs_ratio = buy_vol / (buy_vol + sell_vol + 1e-9)
         nvi = (buy_vol - sell_vol) / (buy_vol + sell_vol + 1e-9)
-        
+
         # Candlestick rejection structure
         high = bar["high"]
         low = bar["low"]
@@ -61,7 +59,7 @@ class FeatureAssembler:
         upper_wick_ratio = (high - max(open_p, close_p)) / rng
         lower_wick_ratio = (min(open_p, close_p) - low) / rng
         body_ratio = abs(close_p - open_p) / rng
-        
+
         # Trade size / intensity
         if "trade_count" in bar:
             trade_count = bar["trade_count"]
@@ -74,26 +72,23 @@ class FeatureAssembler:
         avg_trade_size = vol / float(trade_count)
         self.trade_size_history.append(avg_trade_size)
         self.funding_history.append(funding_rate)
-        
+
         # Save base features for lags/rolling
         self.history.append({
             "vpin": self.vpin.value,
             "price_z": self.regime.price_z,
             "volume_z": self.regime.volume_z,
-            "bs_ratio": bs_ratio,
             "nvi": nvi,
             "upper_wick_ratio": upper_wick_ratio,
             "lower_wick_ratio": lower_wick_ratio,
             "body_ratio": body_ratio,
             "avg_trade_size": avg_trade_size,
-            "price": bar["close"]
         })
-        self.vpin_history.append(self.vpin.value)
-        
+
     def get_features(self) -> Dict[str, float]:
         """Returns flat dict of features for XGBoost."""
         import pandas as pd
-        
+
         # Base features
         feats = {
             "vpin": self.vpin.value,
@@ -104,27 +99,10 @@ class FeatureAssembler:
             "ffd_log_price_04": self.ffd_price.value,
             "ffd_log_vol_04": self.ffd_volume.value
         }
-        
-        # Advanced features
-        if len(self.history) >= 2:
-            prev = self.history[-2]
-            feats["vpin_lag1"] = prev["vpin"]
-            feats["volume_z_lag1"] = prev["volume_z"]
-        else:
-            feats["vpin_lag1"] = feats["vpin"]
-            feats["volume_z_lag1"] = feats["volume_z"]
-            
-        if len(self.history) > 0:
-            feats["vpin_mean_10"] = sum(h["vpin"] for h in self.history) / len(self.history)
-        else:
-            feats["vpin_mean_10"] = feats["vpin"]
-            
+
         dt = pd.to_datetime(self.last_timestamp, unit="ms")
         feats["hour_of_day"] = dt.hour
-        feats["day_of_week"] = dt.dayofweek
-        
-        feats["vpin_x_funding"] = feats["vpin"] * self.last_funding
-        
+
         # NOTE: If funding rate cannot be reliably retrieved in live trading, remove funding_rate and funding_rate_z from features
         feats["funding_rate"] = self.last_funding
         if len(self.funding_history) > 10:
@@ -133,59 +111,35 @@ class FeatureAssembler:
             feats["funding_rate_z"] = float((self.last_funding - np.mean(f_hist)) / f_std) if f_std > 1e-9 else 0.0
         else:
             feats["funding_rate_z"] = 0.0
-            
+
         if len(self.funding_history) >= 6:
             feats["funding_rate_momentum"] = self.last_funding - self.funding_history[-6]
         else:
             feats["funding_rate_momentum"] = 0.0
-        
+
         # New Directional & Candlestick Features
         if len(self.history) > 0:
             curr = self.history[-1]
-            feats["buy_sell_ratio"] = curr["bs_ratio"]
             feats["net_volume_imbalance"] = curr["nvi"]
             feats["upper_wick_ratio"] = curr["upper_wick_ratio"]
             feats["lower_wick_ratio"] = curr["lower_wick_ratio"]
             feats["body_ratio"] = curr["body_ratio"]
-            
+
             # Cumulative NVI over last 10 bars
             recent_nvi = [h["nvi"] for h in list(self.history)[-10:]]
             feats["cumulative_nvi_10"] = sum(recent_nvi)
-            
+
             if len(self.history) >= 13:
                 recent_nvi_3_ago = [h["nvi"] for h in list(self.history)[-13:-3]]
                 feats["nvi_acceleration"] = feats["cumulative_nvi_10"] - sum(recent_nvi_3_ago)
             else:
                 feats["nvi_acceleration"] = 0.0
-            
+
             if len(self.history) >= 6:
                 feats["vpin_delta_5"] = feats["vpin"] - self.history[-6]["vpin"]
             else:
                 feats["vpin_delta_5"] = 0.0
-            
-            feats["bs_ratio_mean_5"] = sum(h["bs_ratio"] for h in list(self.history)[-5:]) / min(5, len(self.history))
-            feats["bs_ratio_mean_20"] = sum(h["bs_ratio"] for h in self.history) / len(self.history)
-            
-            # vpin_acceleration (vpin - vpin_lag_5)
-            if len(self.history) >= 6:
-                feats["vpin_acceleration"] = feats["vpin"] - self.history[-6]["vpin"]
-            else:
-                feats["vpin_acceleration"] = 0.0
-                
-            # vpin_bullish_conf (correlation between price and vpin over last 10 bars)
-            if len(self.history) >= 10:
-                recent_10 = list(self.history)[-10:]
-                prices = [h["price"] for h in recent_10]
-                vpins = [h["vpin"] for h in recent_10]
-                if np.std(prices) > 0 and np.std(vpins) > 0:
-                    corr = np.corrcoef(prices, vpins)[0, 1]
-                    feats["vpin_bullish_conf"] = corr if not np.isnan(corr) else 0.0
-                else:
-                    feats["vpin_bullish_conf"] = 0.0
-            else:
-                feats["vpin_bullish_conf"] = 0.0
         else:
-            feats["buy_sell_ratio"] = 0.5
             feats["net_volume_imbalance"] = 0.0
             feats["upper_wick_ratio"] = 0.0
             feats["lower_wick_ratio"] = 0.0
@@ -193,11 +147,7 @@ class FeatureAssembler:
             feats["cumulative_nvi_10"] = 0.0
             feats["nvi_acceleration"] = 0.0
             feats["vpin_delta_5"] = 0.0
-            feats["bs_ratio_mean_5"] = 0.5
-            feats["bs_ratio_mean_20"] = 0.5
-            feats["vpin_acceleration"] = 0.0
-            feats["vpin_bullish_conf"] = 0.0
-            
+
         # Trade Intensity Z-Score (Whale Footprint)
         if len(self.trade_size_history) > 10:
             ts_curr = self.trade_size_history[-1]
@@ -206,24 +156,15 @@ class FeatureAssembler:
             feats["trade_intensity_z"] = float((ts_curr - np.mean(ts_hist)) / ts_std) if ts_std > 1e-9 else 0.0
         else:
             feats["trade_intensity_z"] = 0.0
-            
+
         # Interaction Features (False-Positive Filters)
         cusum_val = getattr(self.cusum, "cusum", 0.0)
         cusum_dir = 1.0 if cusum_val > 0 else (-1.0 if cusum_val < 0 else 0.0)
         feats["nvi_x_cusum_direction"] = feats["net_volume_imbalance"] * cusum_dir
         feats["volatility_adjusted_nvi"] = feats["net_volume_imbalance"] / max(0.1, feats["vol_regime"])
-        feats["bocpd_x_bar_speed_z"] = feats["bocpd_cp"] * (-feats["bar_speed_z"])
-            
-        # VPIN Percentile (24h)
-        if len(self.vpin_history) > 10:
-            current_vpin = feats["vpin"]
-            count_below = sum(1 for v in self.vpin_history if v < current_vpin)
-            feats["vpin_percentile_24h"] = count_below / len(self.vpin_history)
-        else:
-            feats["vpin_percentile_24h"] = 0.5
-            
+
         return feats
-        
+
     def get_entry_patience_signals(self, direction: int) -> bool:
         """
         Returns True if patience filters (Flow-Book and Bar Speed) align with direction.
@@ -235,6 +176,6 @@ class FeatureAssembler:
             if self.flow_book.streak == 0 and abs(self.bar_speed.speed_z) < 1e-6:
                 return True
         return flow_ok or speed_ok
-        
+
     def get_cusum_ratio(self) -> float:
         return self.cusum.ratio

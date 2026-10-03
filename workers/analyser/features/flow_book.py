@@ -27,9 +27,5 @@ class FlowBookDivergence:
             self.streak = 0
             self.last_direction = 0
             
-    @property
-    def agreement_streak(self):
-        return self.streak
-        
     def agrees(self, direction):
         return self.streak >= 2 and self.last_direction == direction
