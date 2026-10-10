@@ -1,0 +1,12 @@
+numpy
+pandas
+pyarrow
+polars
+scipy
+scikit-learn
+xgboost
+numba
+optuna
+tqdm
+requests
+pytest
